@@ -1,0 +1,4 @@
+#include "resource.h"
+
+IDI_APPICON             ICON "svn_wfx.ico"
+IDI_EDIT_LOCATIONS_ICON ICON "svn_wfx_edit.ico"

@@ -1,0 +1,39 @@
+svn_wfx - Subversion File System Plugin for Total Commander
+
+Copyright (C) 2010 Matthias von Faber
+
+License: GPLv3. See COPYING.
+
+This simple plugin allows the twin-panel file manager Total Commander
+(www.ghisler.com) to browse Subversion repositories. SVN commands like log,
+blame etc. are provided via TortoiseSVN (tortoisesvn.tigris.org).
+
+After installation, Network Neighbourhood inside Total Commander will contain
+a flashy new directory called "Subversion". Running the "Edit Locations"
+file inside will open the configuration file (located at
+%USERPROFILE%\svn_wfx.ini) in your text editor (EDITOR environment variable)
+or Notepad as fallback. Here you can set up your Subversion locations
+(detailed instructions are provided in the file when you first open it). Once
+you are done you have to manually refresh the directory listing (Ctrl+R) to
+have the changes show up in TC.
+
+You can now explore your SVN repository from Total Commander. SVN commands
+are available via TC's command line (Ctrl+E). As the TortoiseSVN people have
+already done all the hard work, svn_wfx uses TortoiseProc for displaying logs
+etc.
+
+Currently the following commands are supported:
+
+  co    [srcdir] - Open Checkout dialog
+  blame  <file>  - Open Blame dialog
+  log    [path]  - Open Log window
+  props  [path]  - Open SVN properties dialog
+  rb     [path]  - Open Repository Browser
+  rg     [path]  - Open Revision Graph
+
+If the parameter is omitted the command will be applied to the current
+Subversion directory. Entering an invalid command will pop up a message box
+with a brief list of valid commands.
+
+Diff is NYI as it requires additional server communication. For now you can
+just diff from the TSVN log dialog.

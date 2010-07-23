@@ -1,0 +1,15 @@
+EXPORTS
+	FsInit
+	FsFindFirst
+	FsFindNext
+	FsFindClose
+	FsGetDefRootName
+	FsGetFile
+	FsContentGetDefaultView
+	FsContentGetDefaultSortOrder
+	FsContentGetSupportedField
+	FsContentGetSupportedFieldFlags
+	FsContentGetValue
+	FsExecuteFile
+	FsExtractCustomIcon
+	FsContentPluginUnloading
