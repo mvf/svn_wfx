@@ -724,11 +724,11 @@ static svn_error_t *querySnapshot(Snapshot *snapshot, const char *path)
         {
             /* found it, fetch data from SVN */
             apr_pool_t *subPool = svn_pool_create(Subversion.pool);
-            char *buf = apr_palloc(subPool, loc->url.len + 1);
-            strbuf_t s = { buf, loc->url.len + 1 };
             svn_error_t *err;
             svn_opt_revision_t revision;
             size_t subPathLen = strlen(path + minLen);
+            char *buf = apr_palloc(subPool, loc->url.len + subPathLen + 1);
+            strbuf_t s = { buf, loc->url.len + subPathLen + 1 };
 
             snapshot->location = loc;
             snapshot->entries = NULL;
