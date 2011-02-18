@@ -13,3 +13,4 @@ EXPORTS
 	FsExecuteFile
 	FsExtractCustomIcon
 	FsContentPluginUnloading
+	FsSetDefaultParams

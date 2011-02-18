@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-/** Zero-terminated string buffer for repeated concatenation into a char array */
+/** Zero-terminated string buffer for efficient and safe concatenation into a char array */
 typedef struct strbuf_t
 {
     char *data;   /* Pointer to remainder of string */
@@ -46,7 +46,7 @@ extern strbuf_t *strbuf_init(strbuf_t *str, char *data, size_t size);
                performed.
     @param src Pointer to source data of at least @a n bytes size. This data is
                copied using memcpy and does not need to be zero-terminated. Any
-               zeroes in @src 's contents are copied as-is.
+               zeroes in @a src 's contents are copied as-is.
     @param n The maximum amount of bytes to copy. If @a n >= dst->size, only
                dst->size - 1 bytes are copied.
     @return @a dst */

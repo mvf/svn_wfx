@@ -134,6 +134,14 @@ typedef struct
     int Attr;
 } RemoteInfoStruct;
 
+typedef struct {
+
+    int size;
+    DWORD PluginInterfaceVersionLow;
+    DWORD PluginInterfaceVersionHi;
+    char DefaultIniName[MAX_PATH];
+} FsDefaultParamStruct;
+
 /*
 ** Callback Types
 */
@@ -172,5 +180,7 @@ ExecResult __stdcall FsExecuteFile(HWND mainWin, char *remoteName, char *verb);
 int        __stdcall FsExtractCustomIcon(char *remoteName, int extractFlags, HICON *icon);
 
 void       __stdcall FsContentPluginUnloading(void);
+
+void       __stdcall FsSetDefaultParams(FsDefaultParamStruct *dps);
 
 #endif /* !SVN_WFX_H_INCLUDED */

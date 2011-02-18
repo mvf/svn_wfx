@@ -10,8 +10,8 @@ blame etc. are provided via TortoiseSVN (tortoisesvn.tigris.org).
 
 After installation, Network Neighbourhood inside Total Commander will contain
 a flashy new directory called "Subversion". Running the "Edit Locations"
-file inside will open the configuration file (located at
-%USERPROFILE%\svn_wfx.ini) in your text editor (EDITOR environment variable)
+file inside will open the configuration file (svn_wfx.ini in your wincmd.ini
+directory) in your text editor (EDITOR environment variable)
 or Notepad as fallback. Here you can set up your Subversion locations
 (detailed instructions are provided in the file when you first open it). Once
 you are done you have to manually refresh the directory listing (Ctrl+R) to

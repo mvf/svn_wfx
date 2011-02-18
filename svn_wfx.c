@@ -28,9 +28,6 @@
 
 #include "resource.h"
 
-static const strbuf_t ConfigFileName     = { "svn_wfx.ini"   , 11 };
-static const strbuf_t EditLocationsTitle = { "Edit Locations", 15 };
-
 /*
 ** Types
 */
@@ -104,10 +101,6 @@ static svn_error_t *querySnapshot(Snapshot *snapshot, const char *path);
     @return 0 on success. */
 static int initSvn();
 
-/** Retrieves the full path to the configuration file.
-    @param dst The string buffer to receive the path. */
-static void getConfigFilename(strbuf_t *dst);
-
 /** (Re-)Loads configuration from disk. */
 static void loadConfig();
 
@@ -116,13 +109,13 @@ static void loadConfig();
     @param findData The destination find data. */
 static void getSvnNode(SVNObject *obj, WIN32_FIND_DATA *findData);
 
-/** Replaces all occurrences of oldVal with newVal in the zero-terminated string str.
+/** Replaces all occurrences of oldVal with newVal in the zero-terminated string @a str.
     @param str The zero-terminated string.
     @param oldVal The value to look for.
     @param newVal The value to replace any oldVal with. */
 static void replaceAll(char *str, char oldVal, char newVal);
 
-/** Replaces all occurrences of '\\' with '/' in the zero-terminated string str.
+/** Replaces all occurrences of '\\' with '/' in the zero-terminated string @a str.
     @param str The zero-terminated string. */
 static void slashify(char *str);
 
@@ -132,11 +125,10 @@ static void destroySnapshot(Snapshot *snapshot);
 /** Releases all locations and snapshots */
 static void freeLocationsAndSnapshots();
 
-/** Copies the SVN URL
-    @param remoteName
-    @param buf
-    @param maxLen */
-static size_t remoteNameToSvnURL(char *remoteName, char *buf, size_t maxLen);
+/** @return The SVN URI associated with @a remoteName, allocated from @a pool,
+    with @a overAllocate additional bytes allocated past the terminating zero,
+    or NULL if @a remoteName did not match any known locations. */
+static char *remoteNameToSvnURI(char *remoteName, apr_pool_t *pool, size_t overAllocate);
 
 /** Displays an error message box.
     @param msg The message to display. */
@@ -158,11 +150,15 @@ static svn_error_t *promptCallbackUsername(svn_auth_cred_username_t **cred, void
 /*
 ** Globals
 */
+static const String ConfigFileName     = { "svn_wfx.ini"   , 11 };
+static const String EditLocationsTitle = { "Edit Locations", 14 };
+
 static HINSTANCE hInstance;
 
 static struct
 {
     Location *locations;
+    String configFilePath;
 } Config = { 0 };
 
 static const Field fields[] =
@@ -225,7 +221,6 @@ int __stdcall FsInit(int pluginId, f_progress_t fProgress, f_log_t fLog, f_reque
     Plugin.log      = fLog;
     Plugin.request  = fRequest;
     memset(&cachedSnapshot, 0, sizeof(cachedSnapshot));
-    loadConfig();
     tproc_init(&displayErrorMessage);
     return initSvn();
 }
@@ -245,7 +240,15 @@ HANDLE __stdcall FsFindFirst(char* path, WIN32_FIND_DATA *findData)
         /* nested directory */
         Snapshot *snapshot = malloc(sizeof(Snapshot));
         svn_error_t *err = querySnapshot(snapshot, path);
-        if (!err)
+        if (err)
+        {
+            if (err->message)
+            {
+                MessageBox(NULL, err->message, "SVN Error", MB_OK | MB_ICONERROR);
+            }
+            svn_error_clear(err);
+        }
+        else
         {
             if (snapshot->entries)
             {
@@ -256,20 +259,12 @@ HANDLE __stdcall FsFindFirst(char* path, WIN32_FIND_DATA *findData)
             }
             SetLastError(ERROR_NO_MORE_FILES);
         }
-        else
-        {
-            if (err->message)
-            {
-                MessageBox(NULL, err->message, "SVN Error", MB_OK | MB_ICONERROR);
-            }
-            svn_error_clear(err);
-        }
         free(snapshot);
     }
     else
     {
         /* root directory */
-        memcpy(findData->cFileName, EditLocationsTitle.data, EditLocationsTitle.size);
+        memcpy(findData->cFileName, EditLocationsTitle.data, EditLocationsTitle.len + 1);
         findData->dwFileAttributes = FILE_ATTRIBUTE_READONLY;
         nextTopLevelLoc = Config.locations;
         return (HANDLE) 0;
@@ -326,22 +321,24 @@ int __stdcall FsFindClose(HANDLE handle)
 /*--------------------------------------------------------------------------*/
 int __stdcall FsGetFile(char *remoteName, char *localName, int copyFlags, RemoteInfoStruct *ri)
 {
+    apr_pool_t *subPool = svn_pool_create(Subversion.pool);
     svn_opt_revision_t revision;
     apr_file_t *file;
     svn_stream_t *stream;
-    char buf[1024];
+    char *uri;
 
     if (*remoteName++ != '\\' )
     {
         return FS_FILE_NOTFOUND;
     }
 
-    if (!remoteNameToSvnURL(remoteName, buf, sizeof(buf)))
+    uri = remoteNameToSvnURI(remoteName, subPool, 0);
+    if (!uri)
     {
-        return FS_FILE_NOTFOUND;
+        return svn_pool_destroy(subPool), FS_FILE_NOTFOUND;
     }
 
-    Plugin.progress(Plugin.id, buf, localName, 0);
+    Plugin.progress(Plugin.id, uri, localName, 0);
     revision.kind = svn_opt_revision_head;
 
     slashify(localName);
@@ -350,26 +347,27 @@ int __stdcall FsGetFile(char *remoteName, char *localName, int copyFlags, Remote
         replaceAll(localName, '/', '\\');
         if (apr_status)
         {
+            char buf[1024];
             apr_strerror(apr_status, buf, sizeof(buf));
             MessageBox(NULL, buf, "apr_file_open", MB_OK | MB_ICONERROR);
-            return FS_FILE_WRITEERROR;
+            return svn_pool_destroy(subPool), FS_FILE_WRITEERROR;
         }
     }
     stream = svn_stream_from_aprfile2(file, FALSE, Subversion.pool);
     {
-        svn_error_t *svn_error = svn_client_cat(stream, buf, &revision, Subversion.ctx, Subversion.pool);
+        svn_error_t *svn_error = svn_client_cat(stream, uri, &revision, Subversion.ctx, Subversion.pool);
         if (svn_error)
         {
             MessageBox(NULL, svn_error->message, "svn_client_cat", MB_OK | MB_ICONERROR);
             apr_file_close(file);
-            return FS_FILE_READERROR;
+            return svn_pool_destroy(subPool), FS_FILE_READERROR;
         }
     }
 
     svn_stream_close(stream);
-    Plugin.progress(Plugin.id, buf, localName, 100);
+    Plugin.progress(Plugin.id, uri, localName, 100);
 
-    return FS_FILE_OK;
+    return svn_pool_destroy(subPool), FS_FILE_OK;
 }
 
 /*--------------------------------------------------------------------------*/
@@ -502,29 +500,37 @@ int __stdcall FsContentGetValue(char *fileName, int fieldIndex, int unitIndex, v
 /*--------------------------------------------------------------------------*/
 ExecResult __stdcall FsExecuteFile(HWND mainWin, char *remoteName, char *verb)
 {
-    char buf[1024];
-    strbuf_t s = { buf, sizeof(buf) };
+    apr_pool_t *subPool;
 
     if (!remoteName || *remoteName++ != '\\' )
     {
         return FS_EXEC_ERROR;
     }
 
+    subPool = svn_pool_create(Subversion.pool);
+
     if (!strnicmp(verb, "open", 4))
     {
-        if (!memcmp(remoteName, EditLocationsTitle.data, EditLocationsTitle.size))
+        if (!strcmp(remoteName, EditLocationsTitle.data))
         {
+            static const char * const EnvEditor = "EDITOR";
+            static const String DefaultEditor = { "notepad.exe", 11 };
             STARTUPINFO si;
             PROCESS_INFORMATION pi;
+            const DWORD editorPathLen = GetEnvironmentVariable(EnvEditor, NULL, 0);
+            /* length of editor command + strlen(" \"") + length of config file path + strlen("\"") + 1 */
+            const size_t bufferSize = (editorPathLen ? editorPathLen : DefaultEditor.len) + 2 + Config.configFilePath.len + 2;
 
+            char *buf = apr_palloc(subPool, bufferSize);
+            strbuf_t s = { buf, bufferSize };
             GetStartupInfo(&si);
-            strbuf_adv(&s, GetEnvironmentVariable("EDITOR", s.data, s.size));
+            strbuf_adv(&s, GetEnvironmentVariable(EnvEditor, s.data, s.size));
             if (s.data == buf)
             {
-                strbuf_cat(&s, "notepad.exe", 11);
+                strbuf_cat(&s, DefaultEditor.data, DefaultEditor.len);
             }
             strbuf_cat(&s, " \"", 2);
-            getConfigFilename(&s);
+            strbuf_cat(&s, Config.configFilePath.data, Config.configFilePath.len);
             strbuf_cat(&s, "\"", 1);
 
             CreateProcess(NULL, buf, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
@@ -533,52 +539,58 @@ ExecResult __stdcall FsExecuteFile(HWND mainWin, char *remoteName, char *verb)
             CloseHandle(pi.hProcess);
             loadConfig();
 
-            return FS_EXEC_OK;
+            return svn_pool_destroy(subPool), FS_EXEC_OK;
         }
-        return FS_EXEC_YOURSELF;
+        return svn_pool_destroy(subPool), FS_EXEC_YOURSELF;
     }
     else if (*remoteName && !strnicmp(verb, "quote ", 6))
     {
-        strbuf_adv(&s, remoteNameToSvnURL(remoteName, s.data, s.size));
-        if (s.data > buf)
+        static const struct Command
         {
-            static const struct Command
-            {
-                String cmd;
-                const char *helpParam, *helpText;
-                void (*proc)(const char *);
-            } commands[] = {
-                { { "co",    2 }, "[srcdir]", "Open Checkout dialog",       &tproc_checkout    },
-                { { "blame", 5 }, "<file>",   "Open Blame dialog",          &tproc_blame       },
-                { { "log",   3 }, "[path]",   "Open Log dialog",            &tproc_log         },
-                { { "props", 5 }, "[path]",   "Open SVN properties dialog", &tproc_props       },
-                { { "rb",    2 }, "[path]",   "Open Repository Browser",    &tproc_repobrowser },
-                { { "rg",    2 }, "[path]",   "Open Revision Graph",        &tproc_revgraph    },
-                { { NULL,    0 }, NULL,       NULL,                         NULL               }
-            };
-            const struct Command *command = commands;
+            String cmd;
+            const char *helpParam, *helpText;
+            void (*proc)(const char *);
+        } commands[] = {
+            { { "co",    2 }, "[srcdir]", "Open Checkout dialog",       &tproc_checkout    },
+            { { "blame", 5 }, "<file>",   "Open Blame dialog",          &tproc_blame       },
+            { { "log",   3 }, "[path]",   "Open Log dialog",            &tproc_log         },
+            { { "props", 5 }, "[path]",   "Open SVN properties dialog", &tproc_props       },
+            { { "rb",    2 }, "[path]",   "Open Repository Browser",    &tproc_repobrowser },
+            { { "rg",    2 }, "[path]",   "Open Revision Graph",        &tproc_revgraph    },
+            { { NULL,    0 }, NULL,       NULL,                         NULL               }
+        };
+        const struct Command *command = commands;
+        char *buf;
 
-            verb += 6; /* skip "quote " */
-            while (command->cmd.data)
+        verb += 6; /* skip "quote " */
+        while (command->cmd.data)
+        {
+            if (!strnicmp(verb, command->cmd.data, command->cmd.len))
             {
-                if (!strnicmp(verb, command->cmd.data, command->cmd.len))
+                size_t argLen;
+                verb += command->cmd.len;
+                while (isspace(*verb) || *verb == '"') ++verb;
+                argLen = strlen(verb);
+                buf = remoteNameToSvnURI(remoteName, subPool, argLen);
+
+                if (*verb)
                 {
-                    verb += command->cmd.len;
-                    while (isspace(*verb) || *verb == '"') ++verb;
-                    if (*verb)
-                    {
-                        strbuf_cat(&s, verb, strlen(verb));
-                        verb = s.data - 1;
-                        while (isspace(*verb) || *verb == '"') *verb-- = '\0';
-                    }
-                    command->proc(buf);
-                    return FS_EXEC_OK;
+                    strbuf_t s = { buf + strlen(buf), argLen + 1 };
+                    strbuf_cat(&s, verb, argLen);
+                    verb = s.data - 1;
+                    while (isspace(*verb) || *verb == '"') *verb-- = '\0';
                 }
-                ++command;
+                command->proc(buf);
+                return svn_pool_destroy(subPool), FS_EXEC_OK;
             }
+            ++command;
+        }
 
+        {
             /* invalid command, display message box with command list */
-            strbuf_init(&s, buf, sizeof(buf));
+            static const size_t errBufLen = 512;
+            strbuf_t s = { buf = apr_palloc(subPool, errBufLen), errBufLen }; /* previous buf will be released by svn_pool_destroy */
+            strbuf_init(&s, buf, errBufLen);
             strbuf_cat(&s, "Supported commands:\n\n", 21);
             command = commands;
             while (command->cmd.data)
@@ -595,7 +607,7 @@ ExecResult __stdcall FsExecuteFile(HWND mainWin, char *remoteName, char *verb)
             MessageBox(mainWin, buf, "Subversion Plugin", MB_OK | MB_ICONINFORMATION);
         }
     }
-    return FS_EXEC_ERROR;
+    return svn_pool_destroy(subPool), FS_EXEC_ERROR;
 }
 
 /*--------------------------------------------------------------------------*/
@@ -603,7 +615,7 @@ int __stdcall FsExtractCustomIcon(char *remoteName, int extractFlags, HICON *ico
 {
     if (remoteName && *remoteName++ == '\\' )
     {
-        if (!memcmp(remoteName, EditLocationsTitle.data, EditLocationsTitle.size))
+        if (!strcmp(remoteName, EditLocationsTitle.data))
         {
             *icon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_EDIT_LOCATIONS_ICON));
             return FS_ICON_EXTRACTED;
@@ -621,6 +633,19 @@ void __stdcall FsContentPluginUnloading(void)
         svn_pool_destroy(Subversion.pool);
         apr_terminate();
     }
+}
+
+/*--------------------------------------------------------------------------*/
+void __stdcall FsSetDefaultParams(FsDefaultParamStruct *dps)
+{
+    const char *p = dps->DefaultIniName + strlen(dps->DefaultIniName);
+    while (*p != '\\') --p;
+    ++p;
+    Config.configFilePath.len = p - dps->DefaultIniName + ConfigFileName.len + 1;
+    Config.configFilePath.data = apr_palloc(Subversion.pool, Config.configFilePath.len);
+    memcpy(Config.configFilePath.data, dps->DefaultIniName, p - dps->DefaultIniName);
+    memcpy(Config.configFilePath.data + (p - dps->DefaultIniName), ConfigFileName.data, ConfigFileName.len + 1);
+    loadConfig();
 }
 
 /*--------------------------------------------------------------------------*/
@@ -780,31 +805,13 @@ static int initSvn()
 }
 
 /*--------------------------------------------------------------------------*/
-static void getConfigFilename(strbuf_t *path)
-{
-    DWORD maxLen = (DWORD) path->size;
-    HANDLE hToken;
-    OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken);
-    GetUserProfileDirectory(hToken, path->data, &maxLen);
-    CloseHandle(hToken);
-    if (maxLen)
-    {
-        strbuf_adv(path, maxLen - 1);
-    }
-    strbuf_cat(path, "\\", 1);
-    strbuf_cat(path, ConfigFileName.data, ConfigFileName.size);
-}
-
-/*--------------------------------------------------------------------------*/
 static void loadConfig()
 {
     char buf[1024];
     strbuf_t s = { buf, sizeof(buf) };
     FILE *f;
 
-    getConfigFilename(&s);
-
-    if ((f = fopen(buf, "r")))
+    if ((f = fopen(Config.configFilePath.data, "r")))
     {
         freeLocationsAndSnapshots();
 
@@ -969,7 +976,7 @@ static void freeLocationsAndSnapshots()
 }
 
 /*--------------------------------------------------------------------------*/
-static size_t remoteNameToSvnURL(char *remoteName, char *buf, size_t maxLen)
+static char *remoteNameToSvnURI(char *remoteName, apr_pool_t *pool, size_t overAllocate)
 {
     const Location *loc = Config.locations;
     size_t remoteNameLen = strlen(remoteName);
@@ -977,16 +984,14 @@ static size_t remoteNameToSvnURL(char *remoteName, char *buf, size_t maxLen)
     {
         if (!memcmp(remoteName, loc->title.data, min(remoteNameLen, loc->title.len)))
         {
+            char *result;
             remoteName += loc->title.len;
             remoteNameLen -= loc->title.len;
-            if (maxLen < remoteNameLen + loc->url.len + 1)
-            {
-                return FALSE;
-            }
+            result = apr_palloc(pool, remoteNameLen + loc->url.len + 1 + overAllocate);
             slashify(remoteName);
-            memcpy(buf, loc->url.data, loc->url.len);
-            memcpy(buf + loc->url.len, remoteName, remoteNameLen + 1);
-            return loc->url.len + remoteNameLen;
+            memcpy(result, loc->url.data, loc->url.len);
+            memcpy(result + loc->url.len, remoteName, remoteNameLen + 1);
+            return result;
         }
 
         loc = loc->next;
