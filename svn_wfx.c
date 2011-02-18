@@ -98,7 +98,7 @@ static svn_error_t* list_func(Snapshot *snapshot,
     @param snapshot The destination snapshot.
     @param path The remote path, in TC format, minus the leading backslash.
     @return An error message on failure, or NULL on success. */
-static const char *querySnapshot(Snapshot *snapshot, const char *path);
+static svn_error_t *querySnapshot(Snapshot *snapshot, const char *path);
 
 /** Initializes Subversion.
     @return 0 on success. */
@@ -244,8 +244,8 @@ HANDLE __stdcall FsFindFirst(char* path, WIN32_FIND_DATA *findData)
     {
         /* nested directory */
         Snapshot *snapshot = malloc(sizeof(Snapshot));
-        const char *errMsg = querySnapshot(snapshot, path);
-        if (!errMsg)
+        svn_error_t *err = querySnapshot(snapshot, path);
+        if (!err)
         {
             if (snapshot->entries)
             {
@@ -258,7 +258,11 @@ HANDLE __stdcall FsFindFirst(char* path, WIN32_FIND_DATA *findData)
         }
         else
         {
-            MessageBox(NULL, errMsg, "SVN Error", MB_OK | MB_ICONERROR);
+            if (err->message)
+            {
+                MessageBox(NULL, err->message, "SVN Error", MB_OK | MB_ICONERROR);
+            }
+            svn_error_clear(err);
         }
         free(snapshot);
     }
@@ -452,14 +456,18 @@ int __stdcall FsContentGetValue(char *fileName, int fieldIndex, int unitIndex, v
         || strncmp(snapshot->subPath.data, baseFilePath, snapshot->subPath.len))
     {
         const char tmp = *baseFileName;
-        const char *errMsg;
+        svn_error_t *err;
         destroySnapshot(snapshot);
         *baseFileName = '\0';
-        errMsg = querySnapshot(snapshot, fileName);
+        err = querySnapshot(snapshot, fileName);
         *baseFileName = tmp;
-        if (errMsg)
+        if (err)
         {
-            displayErrorMessage(errMsg);
+            if (err->message)
+            {
+                displayErrorMessage(err->message);
+            }
+            svn_error_clear(err);
             return FT_FILEERROR;
         }
     }
@@ -680,7 +688,7 @@ static svn_error_t* list_func(Snapshot *snapshot,
 }
 
 /*--------------------------------------------------------------------------*/
-static const char *querySnapshot(Snapshot *snapshot, const char *path)
+static svn_error_t *querySnapshot(Snapshot *snapshot, const char *path)
 {
     const size_t pathLen = strlen(path);
     Location *loc = Config.locations;
@@ -690,12 +698,12 @@ static const char *querySnapshot(Snapshot *snapshot, const char *path)
         if (!strncmp(path, loc->title.data, minLen))
         {
             /* found it, fetch data from SVN */
-            char buf[1024];
-            strbuf_t s = { buf, sizeof(buf) };
+            apr_pool_t *subPool = svn_pool_create(Subversion.pool);
+            char *buf = apr_palloc(subPool, loc->url.len + 1);
+            strbuf_t s = { buf, loc->url.len + 1 };
             svn_error_t *err;
             svn_opt_revision_t revision;
             size_t subPathLen = strlen(path + minLen);
-            apr_pool_t *subPool = svn_pool_create(Subversion.pool);
 
             snapshot->location = loc;
             snapshot->entries = NULL;
@@ -723,13 +731,13 @@ static const char *querySnapshot(Snapshot *snapshot, const char *path)
                 memcpy(snapshot->subPath.data, path + minLen, snapshot->subPath.len + 1);
 
                 snapshot->current = snapshot->entries;
-                return NULL;
             }
-            return err->message;
+            return err;
         }
         loc = loc->next;
     }
-    return "Unknown location";
+
+    return svn_error_create(SVN_ERR_BAD_URL, NULL, "Unknown Location");
 }
 
 /*--------------------------------------------------------------------------*/
@@ -998,7 +1006,7 @@ static svn_error_t *promptLine(const char *prompt,
                                size_t max,
                                RequestRqType requestType)
 {
-    return Plugin.request(Plugin.id, requestType, NULL /* customTitle */, prompt, buffer, max) ? SVN_NO_ERROR : svn_error_create(0, NULL, "Plugin request failed");
+    return Plugin.request(Plugin.id, requestType, NULL /* customTitle */, prompt, buffer, max) ? SVN_NO_ERROR : svn_error_create(SVN_ERR_CANCELLED, NULL, NULL);
 }
 
 /*--------------------------------------------------------------------------*/
