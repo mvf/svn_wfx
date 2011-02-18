@@ -355,7 +355,7 @@ int __stdcall FsGetFile(char *remoteName, char *localName, int copyFlags, Remote
     }
     stream = svn_stream_from_aprfile2(file, FALSE, Subversion.pool);
     {
-        svn_error_t *svn_error = svn_client_cat(stream, uri, &revision, Subversion.ctx, Subversion.pool);
+        svn_error_t *svn_error = svn_client_cat(stream, escapeURI(uri, subPool), &revision, Subversion.ctx, Subversion.pool);
         if (svn_error)
         {
             MessageBox(NULL, svn_error->message, "svn_client_cat", MB_OK | MB_ICONERROR);
@@ -580,7 +580,7 @@ ExecResult __stdcall FsExecuteFile(HWND mainWin, char *remoteName, char *verb)
                     verb = s.data - 1;
                     while (isspace(*verb) || *verb == '"') *verb-- = '\0';
                 }
-                command->proc(buf);
+                command->proc(escapeURI(buf, subPool));
                 return svn_pool_destroy(subPool), FS_EXEC_OK;
             }
             ++command;
