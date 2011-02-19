@@ -321,7 +321,7 @@ int __stdcall FsFindClose(HANDLE handle)
 /*--------------------------------------------------------------------------*/
 int __stdcall FsGetFile(char *remoteName, char *localName, int copyFlags, RemoteInfoStruct *ri)
 {
-    apr_pool_t *subPool = svn_pool_create(Subversion.pool);
+    apr_pool_t *subPool;
     svn_opt_revision_t revision;
     apr_file_t *file;
     svn_stream_t *stream;
@@ -332,10 +332,21 @@ int __stdcall FsGetFile(char *remoteName, char *localName, int copyFlags, Remote
         return FS_FILE_NOTFOUND;
     }
 
+    subPool = svn_pool_create(Subversion.pool);
     uri = remoteNameToSvnURI(remoteName, subPool, 0);
     if (!uri)
     {
         return svn_pool_destroy(subPool), FS_FILE_NOTFOUND;
+    }
+
+    if (!(copyFlags & FS_COPYFLAGS_OVERWRITE))
+    {
+        HANDLE hFile = CreateFile(localName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (hFile != INVALID_HANDLE_VALUE)
+        {
+            CloseHandle(hFile);
+            return svn_pool_destroy(subPool), FS_FILE_EXISTS;
+        }
     }
 
     Plugin.progress(Plugin.id, uri, localName, 0);
