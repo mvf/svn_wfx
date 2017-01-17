@@ -498,6 +498,7 @@ int __stdcall FsContentGetValue(char *fileName, int fieldIndex, int unitIndex, v
             *((long*)fieldValue) = snapshot->current->dirent.created_rev;
             break;
         case FI_AUTHOR:
+            if (snapshot->current->dirent.last_author)
             {
                 strbuf_t s = { (char*) fieldValue, maxLen };
                 strbuf_cat(&s, snapshot->current->dirent.last_author, strlen(snapshot->current->dirent.last_author));
