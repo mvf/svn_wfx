@@ -99,10 +99,10 @@ static svn_error_t *querySnapshot(Snapshot *snapshot, const char *path);
 
 /** Initializes Subversion.
     @return 0 on success. */
-static int initSvn();
+static int initSvn(void);
 
 /** (Re-)Loads configuration from disk. */
-static void loadConfig();
+static void loadConfig(void);
 
 /** Retrieves information about the SVN object.
     @param val The source value.
@@ -123,7 +123,7 @@ static void slashify(char *str);
 static void destroySnapshot(Snapshot *snapshot);
 
 /** Releases all locations and snapshots */
-static void freeLocationsAndSnapshots();
+static void freeLocationsAndSnapshots(void);
 
 /** @return The SVN URI associated with @a remoteName, allocated from @a pool,
     with @a overAllocate additional bytes allocated past the terminating zero,
@@ -796,7 +796,7 @@ static void try(svn_error_t *retVal)
 }
 
 /*--------------------------------------------------------------------------*/
-static int initSvn()
+static int initSvn(void)
 {
     if (apr_initialize() != APR_SUCCESS)
     {
@@ -826,7 +826,7 @@ static int initSvn()
 }
 
 /*--------------------------------------------------------------------------*/
-static void loadConfig()
+static void loadConfig(void)
 {
     FILE *f;
 
@@ -980,7 +980,7 @@ static void destroySnapshot(Snapshot *snapshot)
 }
 
 /*--------------------------------------------------------------------------*/
-static void freeLocationsAndSnapshots()
+static void freeLocationsAndSnapshots(void)
 {
     Location *loc = Config.locations;
     Location *oldLoc;
