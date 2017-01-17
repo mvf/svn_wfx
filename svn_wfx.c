@@ -244,7 +244,16 @@ HANDLE __stdcall FsFindFirst(char* path, WIN32_FIND_DATA *findData)
         {
             if (err->message)
             {
-                MessageBox(NULL, err->message, "SVN Error", MB_OK | MB_ICONERROR);
+                char buf[1024];
+                strbuf_t s = { buf, sizeof(buf) };
+
+                strbuf_cat(&s, err->message, strlen(err->message));
+                if (err->child && err->child->message)
+                {
+                    strbuf_cat(&s, "\n\n", 2);
+                    strbuf_cat(&s, err->child->message, strlen(err->child->message));
+                }
+                MessageBox(NULL, buf, "SVN Error", MB_OK | MB_ICONERROR);
             }
             svn_error_clear(err);
         }
