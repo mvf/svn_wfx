@@ -66,7 +66,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="userenv.lib libapr-1.lib libapriconv-1.lib libaprutil-1.lib xml.lib intl3_svn.lib libsvn_client-1.lib libsvn_delta-1.lib libsvn_diff-1.lib libsvn_fs-1.lib libsvn_fs_base-1.lib libsvn_fs_fs-1.lib libsvn_fs_util-1.lib libsvn_ra-1.lib libsvn_ra_local-1.lib libsvn_ra_neon-1.lib libsvn_ra_serf-1.lib libsvn_ra_svn-1.lib libsvn_repos-1.lib libsvn_subr-1.lib libsvn_wc-1.lib libneon.lib zlibstat.lib libsasl.lib serf.lib svn_client-1.lib svn_delta-1.lib svn_diff-1.lib svn_fs-1.lib svn_ra-1.lib svn_repos-1.lib svn_subr-1.lib svn_wc-1.lib"
+				AdditionalDependencies="libapr-1.lib libsvn_client-1.lib libsvn_fs-1.lib libsvn_subr-1.lib"
 				OutputFile="$(OutDir)\svn.wfx"
 				LinkIncremental="2"
 				AdditionalLibraryDirectories=""
@@ -146,7 +146,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="userenv.lib libapr-1.lib libapriconv-1.lib libaprutil-1.lib xml.lib intl3_svn.lib libsvn_client-1.lib libsvn_delta-1.lib libsvn_diff-1.lib libsvn_fs-1.lib libsvn_fs_base-1.lib libsvn_fs_fs-1.lib libsvn_fs_util-1.lib libsvn_ra-1.lib libsvn_ra_local-1.lib libsvn_ra_neon-1.lib libsvn_ra_serf-1.lib libsvn_ra_svn-1.lib libsvn_repos-1.lib libsvn_subr-1.lib libsvn_wc-1.lib libneon.lib zlibstat.lib libsasl.lib serf.lib svn_client-1.lib svn_delta-1.lib svn_diff-1.lib svn_fs-1.lib svn_ra-1.lib svn_repos-1.lib svn_subr-1.lib svn_wc-1.lib"
+				AdditionalDependencies="libapr-1.lib libsvn_client-1.lib libsvn_fs-1.lib libsvn_subr-1.lib"
 				OutputFile="$(OutDir)\svn.wfx"
 				LinkIncremental="1"
 				AdditionalLibraryDirectories=""
