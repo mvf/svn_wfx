@@ -828,12 +828,12 @@ static int initSvn()
 /*--------------------------------------------------------------------------*/
 static void loadConfig()
 {
-    char buf[1024];
-    strbuf_t s = { buf, sizeof(buf) };
     FILE *f;
 
     if ((f = fopen(Config.configFilePath.data, "r")))
     {
+        char buf[1024];
+
         freeLocationsAndSnapshots();
 
         while (fgets(buf, sizeof(buf), f))
@@ -897,7 +897,7 @@ static void loadConfig()
 
         fclose(f);
     }
-    else if (f = fopen(buf, "w"))
+    else if (f = fopen(Config.configFilePath.data, "w"))
     {
         static const char *defaultIniContents = "# svn_wfx configuration file. Layout:\n"
                                                 "# title = svn_url\n"
