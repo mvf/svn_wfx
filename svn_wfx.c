@@ -238,7 +238,7 @@ HANDLE __stdcall FsFindFirst(char* path, WIN32_FIND_DATA *findData)
     if (*path)
     {
         /* nested directory */
-        Snapshot *snapshot = malloc(sizeof(Snapshot));
+        Snapshot *snapshot = malloc(sizeof(*snapshot));
         svn_error_t *err = querySnapshot(snapshot, path);
         if (err)
         {
@@ -722,7 +722,7 @@ static svn_error_t* list_func(Snapshot *snapshot,
 {
     if (*path)
     {
-        SVNObject *obj = malloc(sizeof(SVNObject));
+        SVNObject *obj = malloc(sizeof(*obj));
         memcpy(&obj->dirent, dirent, sizeof(*dirent));
         obj->dirent.last_author = strdup(obj->dirent.last_author);
         obj->name = strdup(path);
@@ -811,7 +811,7 @@ static int initSvn(void)
     /* Make the client_ctx capable of authenticating users */
     {
         svn_auth_provider_object_t *provider;
-        apr_array_header_t *providers = apr_array_make(Subversion.pool, 4, sizeof (svn_auth_provider_object_t *));
+        apr_array_header_t *providers = apr_array_make(Subversion.pool, 4, sizeof(provider));
 
         svn_auth_get_simple_prompt_provider(&provider, promptCallback, NULL, /* baton */ 2, /* retry limit */ Subversion.pool);
         APR_ARRAY_PUSH (providers, svn_auth_provider_object_t *) = provider;
@@ -855,7 +855,7 @@ static void loadConfig(void)
             if (*p == '=')
             {
                 const char *equals = p;
-                Location *loc = malloc(sizeof(Location));
+                Location *loc = malloc(sizeof(*loc));
 
                 while ((p > left) && isspace(p[-1])) --p;
                 if (p > left)
