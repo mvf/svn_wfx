@@ -151,6 +151,15 @@ static svn_error_t *promptCallback(svn_auth_cred_simple_t **cred, void *baton, c
 /** @see svn_auth_username_prompt_func_t */
 static svn_error_t *promptCallbackUsername(svn_auth_cred_username_t **cred, void *baton, const char *realm, svn_boolean_t may_save, apr_pool_t *pool);
 
+/** @see svn_auth_ssl_server_trust_prompt_func_t */
+static svn_error_t *promptSSLTrustAny(svn_auth_cred_ssl_server_trust_t **cred_p,
+                                      void *baton,
+                                      const char *realm,
+                                      apr_uint32_t failures,
+                                      const svn_auth_ssl_server_cert_info_t *cert_info,
+                                      svn_boolean_t may_save,
+                                      apr_pool_t *pool);
+
 /*
 ** Globals
 */
@@ -804,6 +813,9 @@ static int initSvn(void)
             svn_auth_get_username_prompt_provider(&provider, promptCallbackUsername, NULL, /* baton */ 2, /* retry limit */ Subversion.pool);
             APR_ARRAY_PUSH (providers, svn_auth_provider_object_t *) = provider;
 
+            svn_auth_get_ssl_server_trust_prompt_provider(&provider, promptSSLTrustAny, NULL, Subversion.pool);
+            APR_ARRAY_PUSH(providers, svn_auth_provider_object_t *) = provider;
+
             /* Register the auth-providers into the context's auth_baton. */
             svn_auth_open (&Subversion.ctx->auth_baton, providers, Subversion.pool);
         }
@@ -1090,5 +1102,20 @@ static svn_error_t *promptCallbackUsername(svn_auth_cred_username_t **cred,
     ret->username = apr_pstrdup(pool, buf);
 
     *cred = ret;
+    return SVN_NO_ERROR;
+}
+
+/*--------------------------------------------------------------------------*/
+static svn_error_t *promptSSLTrustAny(svn_auth_cred_ssl_server_trust_t **cred_p,
+                                      void *baton,
+                                      const char *realm,
+                                      apr_uint32_t failures,
+                                      const svn_auth_ssl_server_cert_info_t *cert_info,
+                                      svn_boolean_t may_save,
+                                      apr_pool_t *pool)
+{
+    *cred_p = apr_pcalloc(pool, sizeof(**cred_p));
+    (*cred_p)->may_save = FALSE;
+    (*cred_p)->accepted_failures = failures;
     return SVN_NO_ERROR;
 }
