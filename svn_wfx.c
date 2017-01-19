@@ -134,6 +134,10 @@ static char *remoteNameToSvnURI(char *remoteName, apr_pool_t *pool, size_t overA
     @param msg The message to display. */
 static void displayErrorMessage(const char *msg);
 
+/** Displays an SVN error message box.
+    @param err The SVN error. */
+static void displaySvnErrorMessage(const svn_error_t *err);
+
 /** Reads a single line of input via TC Plugin Request.
     @param prompt The string to the left of the text input widget.
     @param buffer Buffer that contains the default response and receives input.
@@ -195,7 +199,6 @@ static struct
 {
     apr_pool_t *pool;
     svn_client_ctx_t *ctx;
-    svn_error_t *error;
 } Subversion = { 0 };
 
 static Location *nextTopLevelLoc;
@@ -242,19 +245,7 @@ HANDLE __stdcall FsFindFirst(char* path, WIN32_FIND_DATA *findData)
         svn_error_t *err = querySnapshot(snapshot, path);
         if (err)
         {
-            if (err->message)
-            {
-                char buf[1024];
-                strbuf_t s = { buf, sizeof(buf) };
-
-                strbuf_cat(&s, err->message, strlen(err->message));
-                if (err->child && err->child->message)
-                {
-                    strbuf_cat(&s, "\n\n", 2);
-                    strbuf_cat(&s, err->child->message, strlen(err->child->message));
-                }
-                MessageBox(NULL, buf, "SVN Error", MB_OK | MB_ICONERROR);
-            }
+            displaySvnErrorMessage(err);
             svn_error_clear(err);
         }
         else
@@ -378,7 +369,7 @@ int __stdcall FsGetFile(char *remoteName, char *localName, int copyFlags, Remote
         svn_error_t *svn_error = svn_client_cat(stream, escapeURI(uri, subPool), &revision, Subversion.ctx, Subversion.pool);
         if (svn_error)
         {
-            MessageBox(NULL, svn_error->message, "svn_client_cat", MB_OK | MB_ICONERROR);
+            displaySvnErrorMessage(svn_error);
             apr_file_close(file);
             return svn_pool_destroy(subPool), FS_FILE_READERROR;
         }
@@ -481,10 +472,7 @@ int __stdcall FsContentGetValue(char *fileName, int fieldIndex, int unitIndex, v
         *baseFileName = tmp;
         if (err)
         {
-            if (err->message)
-            {
-                displayErrorMessage(err->message);
-            }
+            displayErrorMessage(err->message);
             svn_error_clear(err);
             return FT_FILEERROR;
         }
@@ -787,42 +775,44 @@ static svn_error_t *querySnapshot(Snapshot *snapshot, const char *path)
 }
 
 /*--------------------------------------------------------------------------*/
-static void try(svn_error_t *retVal)
-{
-    if ((Subversion.error = retVal))
-    {
-        MessageBox(NULL, Subversion.error->message, "Error", MB_OK);
-    }
-}
-
-/*--------------------------------------------------------------------------*/
 static int initSvn(void)
 {
+    svn_error_t *err;
+
     if (apr_initialize() != APR_SUCCESS)
     {
         MessageBox(NULL, "apr_initialize failed!", NULL, MB_OK | MB_ICONERROR);
         return -1;
     }
     Subversion.pool = svn_pool_create(NULL);
-    Subversion.error = svn_fs_initialize(Subversion.pool);
-    try(svn_client_create_context(&Subversion.ctx, Subversion.pool));
-    try(svn_config_get_config(&(Subversion.ctx->config), NULL, Subversion.pool));
+    do {
+        if ((err = svn_fs_initialize(Subversion.pool)))
+            break;
+        if ((err = svn_client_create_context(&Subversion.ctx, Subversion.pool)))
+            break;
+        if ((err = svn_config_get_config(&(Subversion.ctx->config), NULL, Subversion.pool)))
+            break;
 
-    /* Make the client_ctx capable of authenticating users */
-    {
-        svn_auth_provider_object_t *provider;
-        apr_array_header_t *providers = apr_array_make(Subversion.pool, 4, sizeof(provider));
+        /* Make the client_ctx capable of authenticating users */
+        {
+            svn_auth_provider_object_t *provider;
+            apr_array_header_t *providers = apr_array_make(Subversion.pool, 4, sizeof(provider));
 
-        svn_auth_get_simple_prompt_provider(&provider, promptCallback, NULL, /* baton */ 2, /* retry limit */ Subversion.pool);
-        APR_ARRAY_PUSH (providers, svn_auth_provider_object_t *) = provider;
+            svn_auth_get_simple_prompt_provider(&provider, promptCallback, NULL, /* baton */ 2, /* retry limit */ Subversion.pool);
+            APR_ARRAY_PUSH (providers, svn_auth_provider_object_t *) = provider;
 
-        svn_auth_get_username_prompt_provider(&provider, promptCallbackUsername, NULL, /* baton */ 2, /* retry limit */ Subversion.pool);
-        APR_ARRAY_PUSH (providers, svn_auth_provider_object_t *) = provider;
+            svn_auth_get_username_prompt_provider(&provider, promptCallbackUsername, NULL, /* baton */ 2, /* retry limit */ Subversion.pool);
+            APR_ARRAY_PUSH (providers, svn_auth_provider_object_t *) = provider;
 
-        /* Register the auth-providers into the context's auth_baton. */
-        svn_auth_open (&Subversion.ctx->auth_baton, providers, Subversion.pool);
-    }
-    return 0;
+            /* Register the auth-providers into the context's auth_baton. */
+            svn_auth_open (&Subversion.ctx->auth_baton, providers, Subversion.pool);
+        }
+
+        return 0;
+    } while (0);
+    displaySvnErrorMessage(err);
+    svn_pool_destroy(Subversion.pool);
+    return -1;
 }
 
 /*--------------------------------------------------------------------------*/
@@ -1024,6 +1014,24 @@ static char *remoteNameToSvnURI(char *remoteName, apr_pool_t *pool, size_t overA
 static void displayErrorMessage(const char *msg)
 {
     MessageBox(NULL, msg, NULL, MB_OK | MB_ICONERROR);
+}
+
+/*--------------------------------------------------------------------------*/
+static void displaySvnErrorMessage(const svn_error_t *err)
+{
+    if (err->message)
+    {
+        char buf[1024];
+        strbuf_t s = { buf, sizeof(buf) };
+
+        strbuf_cat(&s, err->message, strlen(err->message));
+        if (err->child && err->child->message)
+        {
+            strbuf_cat(&s, "\n\n", 2);
+            strbuf_cat(&s, err->child->message, strlen(err->child->message));
+        }
+        MessageBox(NULL, buf, "SVN Error", MB_OK | MB_ICONERROR);
+    }
 }
 
 /*--------------------------------------------------------------------------*/
